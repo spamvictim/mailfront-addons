@@ -1,0 +1,11 @@
+backend-qmailsump.so
+plugin-batv.so
+plugin-dcc.so
+plugin-greylist.so
+plugin-sauser.so
+plugin-sqlog.so
+sqllib.so
+plugin-chkdns.so
+plugin-authres.so
+plugin-arlog.so
+

@@ -1,0 +1,50 @@
+# local plugins for mailfront
+MYSQLCFG=/usr/local/bin/mysql_config
+
+# for production
+#CONFMODULES=`cat conf-modules`
+
+# for debugging
+CONFMODULES=.
+
+all:  backend-qmailsump.so \
+	plugin-greylist.so plugin-dcc.so plugin-sauser.so plugin-batv.so \
+	plugin-sqlog.so plugin-authres.so plugin-arlog.so plugin-chkdns.so sqllib.so
+
+backend-qmailsump.so: makeso backend-qmailsump.c mailfront.h responses.h constants.h conf_qmail.c
+	./makeso backend-qmailsump.c  -lbg -lbg-sysdeps 
+
+plugin-batv.so: makeso plugin-batv.c mailfront.h responses.h constants.h
+	./makeso plugin-batv.c  -lbg -lbg-sysdeps -lcrypto
+
+plugin-dcc.so: makeso plugin-dcc.c mailfront.h responses.h constants.h
+	./makeso plugin-dcc.c  -lbg -lbg-sysdeps 
+
+plugin-greylist.so: makeso plugin-greylist.c mailfront.h responses.h constants.h
+	./makeso plugin-greylist.c  -lbg -lbg-sysdeps 
+
+plugin-sauser.so: makeso plugin-sauser.c mailfront.h responses.h constants.h
+	./makeso plugin-sauser.c  -lbg -lbg-sysdeps 
+
+plugin-chkdns.so: makeso plugin-chkdns.c mailfront.h responses.h constants.h
+	./makeso plugin-chkdns.c  -lbg -lbg-sysdeps 
+
+plugin-sqlog.so: makeso plugin-sqlog.c sqllib.so mailfront.h responses.h constants.h
+	./makeso plugin-sqlog.c ${CONFMODULES}/sqllib.so -lbg -lbg-sysdeps
+
+plugin-authres.so: makeso plugin-authres.c mailfront.h responses.h constants.h
+	./makeso plugin-authres.c -lbg -lbg-sysdeps -lspf2 -lopendkim
+
+plugin-arlog.so: makeso plugin-arlog.c sqllib.so mailfront.h responses.h constants.h
+	./makeso plugin-arlog.c ${CONFMODULES}/sqllib.so -lbg -lbg-sysdeps -lspf2 -lopendkim
+
+sqllib.so: sqllib.c conf-ccso
+	./makeso sqllib.c `${MYSQLCFG} --include` -lbg -lbg-sysdeps `${MYSQLCFG} --libs`
+#	`head -1 conf-ccso` -I`head -1 conf-bgincs` -c `${MYSQLCFG} --include` sqllib.c
+
+install: INSTHIER.local conf-bin conf-modules conf-include
+	bg-installer -v <INSTHIER.local
+	bg-installer -c <INSTHIER.local
+
+clean: TARGETS.local
+	rm -f `cat TARGETS.local`

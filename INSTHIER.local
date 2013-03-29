@@ -1,0 +1,11 @@
+>modules
+c:::755::backend-qmailsump.so
+c:::755::plugin-batv.so
+c:::755::plugin-dcc.so
+c:::755::plugin-greylist.so
+c:::755::plugin-spamassassin.so
+c:::755::plugin-sqlog.so
+c:::755::plugin-chkdns.so
+c:::755::plugin-authres.so
+c:::755::plugin-arlog.so
+c:::755::sqllib.so

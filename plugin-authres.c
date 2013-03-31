@@ -69,12 +69,14 @@ static const response* authres_message_end(int fd)
 	int newfd;
 	ibuf msgib;
 	obuf newob;
-	str msgstr;
+	str msgstr, matchstr;
 	int sump = session_getnum("sump", 0);
 	DKIM_SIGINFO **sigs;
 	int nsigs;
 	unsigned int opts = DKIM_LIBFLAGS_FIXCRLF;
-	const char *host;
+	const char *host = getprotoenv("LOCALHOST");
+
+	if(!host) host = "localhost";
 
 	dl = dkim_init(NULL, NULL);
 	if(!dl) {
@@ -99,7 +101,13 @@ static const response* authres_message_end(int fd)
 
 	/* send the message as chunks */
 	str_init(&msgstr);
+	str_init(&matchstr);
+	str_copy3s(&matchstr, "Authentication-Results:*",host,"*"); /* close enough */
+
 	while(ibuf_getstr(&msgib, &msgstr, LF)) {
+		/* check for existing A-R header from us and delete it */
+		if(str_case_match(&msgstr, &matchstr)) continue;
+
 		ds = dkim_chunk(dk, msgstr.s, msgstr.len);
 		if(ds != DKIM_STAT_OK) {
 			if(ds != DKIM_STAT_NOSIG)
@@ -107,6 +115,7 @@ static const response* authres_message_end(int fd)
 			break;
 		}
 	}
+	str_free(&matchstr);
 	dkim_chunk(dk, NULL, 0);
 	ds = dkim_eom(dk, NULL);
 
@@ -162,8 +171,6 @@ static const response* authres_message_end(int fd)
 	if (lseek(fd, 0, SEEK_SET) != 0) return &resp_internal;
 	ibuf_init(&msgib, fd, 0, 0, 0);
 
-	host = getprotoenv("LOCALHOST");
-	if(!host) host = "localhost";
 	obuf_put3s(&newob, "Authentication-Results: ", host, " / 1");
 	obuf_putstr(&newob, &arstr);
 	obuf_putc(&newob, '\n');

@@ -163,7 +163,7 @@ static const response* arlog_message_end(int fd)
 	const char *ip = getprotoenv("REMOTEIP");
 	const char *dmrm = getenv("DMARCREJECT");
 	const char *helo;
-	const char *fromdom = NULL;             /* from domain name */
+	str fromdom = {0, 0};             /* from domain name */
 	const char *qh;
 
 	if(!authservid) authservid = getprotoenv("LOCALHOST");
@@ -208,7 +208,8 @@ static const response* arlog_message_end(int fd)
 	dkim_chunk(dk, NULL, 0);
 	ds = dkim_eom(dk, NULL);
 
-	fromdom = dkim_getdomain(dk);
+	str_init(&fromdom);
+	str_copys(&fromdom, dkim_getdomain(dk));
 
 	ds = dkim_getsiglist(dk, &sigs, &nsigs);
 	if(ds != DKIM_STAT_OK) {
@@ -229,13 +230,13 @@ static const response* arlog_message_end(int fd)
 			if(!str_cat3s(&sqlstr, ",result='",spf_sresponse.s,"'")) return &resp_internal;
 		if(helo)
 			if(!str_cat3s(&sqlstr, ",helo='",helo,"'")) return &resp_internal;
-		if(fromdom)
-			if(!str_cat3s(&sqlstr, ",sender='",fromdom,"'")) return &resp_internal;
+		if(fromdom.len)
+			if(!str_cat3s(&sqlstr, ",sender='",fromdom.s,"'")) return &resp_internal;
 
 		/* msg2("sql ", sqlstr.s); */
 		sqlquery(&sqlstr, NULL);
 	} else
-		msg2("no sqlseq ", fromdom);
+		msg2("no sqlseq ", fromdom.s);
 
 	/* check dmarc policy */
 	if ((qh = getenv("QMAILHOME")) == 0)	/* for reference to public suffix file in control/ */
@@ -245,7 +246,7 @@ static const response* arlog_message_end(int fd)
 	opendmarc_policy_library_init(&dmarclib);
 	dmp = opendmarc_policy_connect_init((u_char *)ip, !!strchr(ip, ':'));
 	if(!dmp) return &resp_internal;
-	if(opendmarc_policy_store_from_domain(dmp, (u_char *)fromdom) != DMARC_PARSE_OKAY) {
+	if(opendmarc_policy_store_from_domain(dmp, (u_char *)fromdom.s) != DMARC_PARSE_OKAY) {
 		/* bogus from, should recover, but probably no great loss */
 		return &resp_internal;
 	}
@@ -303,7 +304,7 @@ static const response* arlog_message_end(int fd)
 				if(ds == DKIM_STAT_OK) {
 					str_cat3s(&arstr, " header.b=\"", hashbuf, "\"");
 					str_cat3s(&sqlstr, ",sigstr='", hashbuf, "'");
-					if(fromdom)opendmarc_policy_store_dkim(dmp, d, dmx, NULL);
+					if(fromdom.len)opendmarc_policy_store_dkim(dmp, d, dmx, NULL);
 					
 				}
 				/* msg2("sql ", sqlstr.s); */
@@ -334,12 +335,12 @@ static const response* arlog_message_end(int fd)
 			dmres = "fail.quarantine";
 			doquarantine = 1;
 		}
-		str_cat4s(&arstr, "; dmarc=", dmres, " header.from=", fromdom);
+		str_cat4s(&arstr, "; dmarc=", dmres, " header.from=", fromdom.s);
 
-		msg4("dmarc: ",dmres," for ", fromdom);
+		msg4("dmarc: ",dmres," for ", fromdom.s);
 		if(!str_copys(&sqlstr, "INSERT INTO maildmarc SET serial=")
 		   || !str_catu(&sqlstr, sqlseq)
-		   || !str_cat5s(&sqlstr, ",result='",dmres,"',domain='",fromdom,"'")
+		   || !str_cat5s(&sqlstr, ",result='",dmres,"',domain='",fromdom.s,"'")
 		  ) return &resp_internal;
 		sqlquery(&sqlstr, NULL);
 	}
@@ -371,13 +372,13 @@ static const response* arlog_message_end(int fd)
 
 		if (!dict_load_list(&dmnp, "control/nodmarcpolicy", 0, 0)) /* already in qmail dir */
 			return &resp_internal;
-		str_copys(&msgstr, fromdom);
-		if(dict_get(&dmnp, &msgstr)) {
-			msg2("no dmarc policy for ", fromdom);
+		if(dict_get(&dmnp, &fromdom)) {
+			msg2("no dmarc policy for ", fromdom.s);
 		} else
 			return &resp_nodmarc;
 	}
 	/* XXX nothing about doquarantine */
+	str_free(&fromdom);
 
 	if(!arstr.len) {
 		msg2("no ","arstr");

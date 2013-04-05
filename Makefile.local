@@ -9,7 +9,7 @@ CONFMODULES=.
 
 all:  backend-qmailsump.so \
 	plugin-greylist.so plugin-dcc.so plugin-sauser.so plugin-batv.so \
-	plugin-sqlog.so plugin-authres.so plugin-arlog.so plugin-chkdns.so sqllib.so
+	plugin-sqlog.so plugin-arlog.so plugin-chkdns.so sqllib.so plugin-authres.so
 
 backend-qmailsump.so: makeso backend-qmailsump.c mailfront.h responses.h constants.h conf_qmail.c
 	./makeso backend-qmailsump.c  -lbg -lbg-sysdeps 
@@ -33,10 +33,11 @@ plugin-sqlog.so: makeso plugin-sqlog.c sqllib.so mailfront.h responses.h constan
 	./makeso plugin-sqlog.c ${CONFMODULES}/sqllib.so -lbg -lbg-sysdeps
 
 plugin-authres.so: makeso plugin-authres.c mailfront.h responses.h constants.h
-	./makeso plugin-authres.c -lbg -lbg-sysdeps -lspf2 -lopendkim
+	./makeso plugin-authres.c -lbg -lbg-sysdeps -lspf2 -lopendkim -lopendmarc
 
 plugin-arlog.so: makeso plugin-arlog.c sqllib.so mailfront.h responses.h constants.h
-	./makeso plugin-arlog.c ${CONFMODULES}/sqllib.so -lbg -lbg-sysdeps -lspf2 -lopendkim
+	./makeso plugin-arlog.c ${CONFMODULES}/sqllib.so -lbg -lbg-sysdeps \
+		-lspf2 -lopendkim -lopendmarc
 
 sqllib.so: sqllib.c conf-ccso
 	./makeso sqllib.c `${MYSQLCFG} --include` -lbg -lbg-sysdeps `${MYSQLCFG} --libs`

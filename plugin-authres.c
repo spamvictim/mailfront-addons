@@ -168,7 +168,8 @@ static const response* authres_message_end(int fd)
 	ds = dkim_eom(dk, NULL);
 
 	str_init(&fromdom);
-	str_copys(&fromdom, dkim_getdomain(dk));
+	qh = dkim_getdomain(dk);
+	if(qh)str_copys(&fromdom, qh);
 
 	ds = dkim_getsiglist(dk, &sigs, &nsigs);
 	if(ds != DKIM_STAT_OK) {
@@ -181,18 +182,19 @@ static const response* authres_message_end(int fd)
 		qh = conf_qmail;
 	if (chdir(qh) == -1) return &resp_no_chdir;
 
-	opendmarc_policy_library_init(&dmarclib);
-	dmp = opendmarc_policy_connect_init((u_char *)ip, !!strchr(ip, ':'));
-	if(!dmp) return &resp_internal;
-	if(opendmarc_policy_store_from_domain(dmp, (u_char *)fromdom.s) != DMARC_PARSE_OKAY) {
-		/* bogus from, should recover, but probably no great loss */
-		return &resp_internal;
-	}
-	
-	/* install SPF results here */
-	opendmarc_policy_store_spf(dmp, (u_char *)(spf_domain.len? spf_domain.s: helo), spf_result,
+	if(fromdom.len) {
+		opendmarc_policy_library_init(&dmarclib);
+		dmp = opendmarc_policy_connect_init((u_char *)ip, !!strchr(ip, ':'));
+		if(!dmp) return &resp_internal;
+		if(opendmarc_policy_store_from_domain(dmp, (u_char *)fromdom.s) != DMARC_PARSE_OKAY) {
+			/* bogus from, should recover, but probably no great loss */
+			return &resp_internal;
+		}
+		/* install SPF results here */
+		opendmarc_policy_store_spf(dmp, (u_char *)(spf_domain.len? spf_domain.s: helo), spf_result,
 				   spf_domain.len?DMARC_POLICY_SPF_ORIGIN_MAILFROM: DMARC_POLICY_SPF_ORIGIN_HELO,
 				   NULL);
+	}
 
 	if(nsigs > 0) {
 		int i;
@@ -244,47 +246,49 @@ static const response* authres_message_end(int fd)
 	dkim_free(dk);
 	dkim_close(dl);
 
-	/* do DMARC stuff, log and do a-r */
-	dms = opendmarc_policy_query_dmarc(dmp, NULL);
-	if(dms == DMARC_PARSE_OKAY) {
-		char *dmres = "temperror";
+	if(fromdom.len) {
+		/* do DMARC stuff, log and do a-r */
+		dms = opendmarc_policy_query_dmarc(dmp, NULL);
+		if(dms == DMARC_PARSE_OKAY) {
+			char *dmres = "temperror";
 
-		if(!arstr.s) str_init(&arstr);
-		dms = opendmarc_get_policy_to_enforce(dmp);
-		/* dms has the dmarc policy */
-		if(dms == DMARC_POLICY_PASS) {
-			dmres = "pass";
-		} if(dms == DMARC_POLICY_NONE) {
-			dmres = "fail.none";
-		} else if(dms == DMARC_POLICY_REJECT) {
-			dmres = "fail.reject";
-			doreject = 1;
-		} else if(dms == DMARC_POLICY_QUARANTINE) {
-			dmres = "fail.quarantine";
-			doquarantine = 1;
+			if(!arstr.s) str_init(&arstr);
+			dms = opendmarc_get_policy_to_enforce(dmp);
+			/* dms has the dmarc policy */
+			if(dms == DMARC_POLICY_PASS) {
+				dmres = "pass";
+			} if(dms == DMARC_POLICY_NONE) {
+				dmres = "fail.none";
+			} else if(dms == DMARC_POLICY_REJECT) {
+				dmres = "fail.reject";
+				doreject = 1;
+			} else if(dms == DMARC_POLICY_QUARANTINE) {
+				dmres = "fail.quarantine";
+				doquarantine = 1;
+			}
+			str_cat4s(&arstr, "; dmarc=", dmres, " header.from=", fromdom.s);
+
+			msg4("dmarc: ",dmres," for ", fromdom.s);
 		}
-		str_cat4s(&arstr, "; dmarc=", dmres, " header.from=", fromdom.s);
 
-		msg4("dmarc: ",dmres," for ", fromdom.s);
-	}
+		/* do this only so many percent */
+		if(doreject || doquarantine) {
+			int pct;
 
-	/* do this only so many percent */
-	if(doreject || doquarantine) {
-		int pct;
+			if(opendmarc_policy_fetch_pct(dmp, &pct) == DMARC_PARSE_OKAY && pct < 100) {
+				struct timeval tv;
 
-		if(opendmarc_policy_fetch_pct(dmp, &pct) == DMARC_PARSE_OKAY && pct < 100) {
-			struct timeval tv;
-
-			gettimeofday(&tv, NULL);
-			if((tv.tv_sec%100) >= pct) {
-				doreject = doquarantine = 0;
-				msg1("dmarc: no policy due to pct");
+				gettimeofday(&tv, NULL);
+				if((tv.tv_sec%100) >= pct) {
+					doreject = doquarantine = 0;
+					msg1("dmarc: no policy due to pct");
+				}
 			}
 		}
-	}
 
-	opendmarc_policy_connect_shutdown(dmp);
-	opendmarc_policy_library_shutdown(&dmarclib);
+		opendmarc_policy_connect_shutdown(dmp);
+		opendmarc_policy_library_shutdown(&dmarclib);
+	}
 
 	if(sump) return 0;	/* done, no a-r header, or it's a sump message */
 

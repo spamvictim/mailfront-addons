@@ -26,6 +26,8 @@ static const response* grey_sender(str* sender, str* param)
 {
   hasgreyrcpt = 0; 
 
+  if(session_getnum("sump", 0)) return 0; /* known spam, don't bother */
+
   if(!str_copy2s(&greymsg, "I", getprotoenv("REMOTEIP"))
      || !str_catc(&greymsg, 0)
      || !str_cat2s(&greymsg, "F", sender->s)
@@ -36,7 +38,7 @@ static const response* grey_sender(str* sender, str* param)
 
 static const response* grey_recipient(str* recipient, str* param)
 {
-  if(session_getnum("sump", 0)) return 0; /* known spam, don't bother */
+	if(session_getnum("sump", 0)) return 0; /* known spam, don't bother */
   hasgreyrcpt++;
   if(!str_cat2s(&greymsg, "T", recipient->s)
      || !str_catc(&greymsg, 0)) return &resp_oom;
@@ -54,6 +56,7 @@ static const response* grey_data_start(int fd)
   ipv4port rport;
 
   if(!hasgreyrcpt) return 0;	/* nothing to delay */
+  if(session_getnum("sump", 0)) return 0; /* known spam, don't bother */
 
   if(!greysocket) {
     char *greyip = getenv("GREYIP");

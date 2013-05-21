@@ -309,7 +309,7 @@ static const response* authres_message_end(int fd)
 	if (lseek(fd, 0, SEEK_SET) != 0) return &resp_internal;
 	ibuf_init(&msgib, fd, 0, 0, 0);
 
-	obuf_put3s(&newob, "Authentication-Results: ", authservid, " / 1");
+	obuf_put3s(&newob, "Authentication-Results: ", authservid);
 	obuf_putstr(&newob, &arstr);
 	obuf_putc(&newob, '\n');
 

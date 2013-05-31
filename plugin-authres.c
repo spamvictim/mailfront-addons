@@ -248,6 +248,8 @@ static const response* authres_message_end(int fd)
 		dms = opendmarc_policy_query_dmarc(dmp, NULL);
 		if(dms == DMARC_PARSE_OKAY) {
 			char *dmres = "temperror";
+			int policy;
+			char *dmpol = "unspecified";
 
 			if(!arstr.s) str_init(&arstr);
 			dms = opendmarc_get_policy_to_enforce(dmp);
@@ -263,9 +265,17 @@ static const response* authres_message_end(int fd)
 				dmres = "fail.quarantine";
 				doquarantine = 1;
 			}
-			str_cat4s(&arstr, "; dmarc=", dmres, " header.from=", fromdom.s);
+			dms = opendmarc_policy_fetch_p(dmp, &policy);
+			if(dms == DMARC_PARSE_OKAY)
+				switch(policy) {
+					case DMARC_RECORD_P_NONE: dmpol = "none" ;
+					case DMARC_RECORD_P_QUARANTINE: dmpol = "quarantine";
+					case DMARC_RECORD_P_REJECT: dmpol = "reject";
+				}
+			str_cat6s(&arstr, "; dmarc=", dmres, " header.from=", fromdom.s,
+				  " policy=",dmpol);
 
-			msg4("dmarc: ",dmres," for ", fromdom.s);
+			msg6("dmarc: ",dmres," for ", fromdom.s, " policy=",dmpol);
 		}
 
 		/* do this only so many percent */
@@ -326,7 +336,7 @@ static const response* authres_message_end(int fd)
 	/* now replace the temp file */
 	dup2(newfd, fd);
 	close(newfd);
-	msg4("Authentication-Results: ", authservid, " / 1", arstr.s);
+	msg3("Authentication-Results: ", authservid, arstr.s);
 
 	return 0;
 }
